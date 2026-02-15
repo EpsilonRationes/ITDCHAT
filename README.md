@@ -4,8 +4,10 @@
 # Как установить.
 
 1. Скачать расширение Tampermonkey
-2. Скачать [ITDCHAT.txt](https://raw.githubusercontent.com/EpsilonRationes/ITDCHAT/refs/heads/main/ITDCHAT.txt) ctrl + s, или кнопка в браузере.
-3. Открыть Tampermonkey перейти в утилиты, нажать экспорт из файла и выбрать ITDCHAT.txt
+2. перейти на [browser://extensions/] для яндекса и [chrome://extensions] для хрома, там включть Tampermonkey
+3. нажать на сведения, и поставить "Разрешить пользовательские скрипты"
+4. Скачать [ITDCHAT.txt](https://raw.githubusercontent.com/EpsilonRationes/ITDCHAT/refs/heads/main/ITDCHAT.txt) ctrl + s, или кнопка в браузере.
+5. Открыть Tampermonkey перейти в утилиты, нажать экспорт из файла и выбрать ITDCHAT.txt
 
 # Как работает
 
