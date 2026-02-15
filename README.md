@@ -9,6 +9,8 @@
 4. Скачать [ITDCHAT.txt](https://raw.githubusercontent.com/EpsilonRationes/ITDCHAT/refs/heads/main/ITDCHAT.txt) ctrl + s, или кнопка в браузере.
 5. Открыть Tampermonkey перейти в утилиты, нажать экспорт из файла и выбрать ITDCHAT.txt
 
+Если у вас андроид, можно скачать приолжение Tampermonkey, или firefox он поддерживает расширения.
+
 # Важно!
 
 Личка работает через комменатрии у вас не должно быть бана на написание комментариев.
