@@ -804,7 +804,9 @@ const observer = new MutationObserver(() => {
 
     if (profileActions && !profileActions.dataset.itd) {
         profileActions.dataset.itd = 'true';
-        profileActions.innerHTML = '<button class="profile-follow-btn chat-btn svelte-p40znu">Создать чат</button>' + profileActions.innerHTML;
+        profileActions.insertAdjacentHTML('afterbegin', 
+        '<button class="profile-follow-btn chat-btn svelte-p40znu">Создать чат</button>'
+        );
         const chatBtn = profileActions.querySelector('.chat-btn');
         chatBtn.addEventListener('click', () => {
             chatBtn.classList.add("following")
