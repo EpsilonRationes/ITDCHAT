@@ -820,7 +820,7 @@ const observer = new MutationObserver(() => {
 
 window.initChatModule = () => {
     if (!getRegComment()) {
-        setTimeout(() => {registation(), 10000})
+        setTimeout(() => {registation()}, 10000)
     }
     injectChiper().then((data) => {});
     window.initChat = (user_uuid) => initChat(getMeUUID(), user_uuid);
