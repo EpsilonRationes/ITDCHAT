@@ -22,7 +22,7 @@ class DiffieHellman {
 
         this.privateKey = keyPair.privateKey;
         this.publicKey = keyPair.publicKey;
-        
+
         return this.publicKey;
     }
 
@@ -38,7 +38,7 @@ class DiffieHellman {
     // Импорт публичного ключа собеседника
     async importPublicKey(exportedKey) {
         const keyData = Uint8Array.from(atob(exportedKey), c => c.charCodeAt(0));
-        
+
         return await crypto.subtle.importKey(
             "spki",
             keyData,
@@ -51,6 +51,24 @@ class DiffieHellman {
         );
     }
 
+    // Экспорт приватного ключа
+    async exportPrivateKey() {
+        const exported = await crypto.subtle.exportKey("pkcs8", this.privateKey);
+        return btoa(String.fromCharCode(...new Uint8Array(exported)));
+    }
+
+    // Импорт приватного ключа
+    async importPrivateKey(exportedPrivateKey) {
+        const keyData = Uint8Array.from(atob(exportedPrivateKey), c => c.charCodeAt(0));
+        return await crypto.subtle.importKey(
+            "pkcs8",
+            keyData,
+            { name: "ECDH", namedCurve: "P-256" },
+            true,
+            ["deriveKey", "deriveBits"]
+        );
+    }
+
     // Вычисление общего ключа
     async computeSharedSecret(otherPublicKey) {
         otherPublicKey = await this.importPublicKey(otherPublicKey)
@@ -60,7 +78,7 @@ class DiffieHellman {
                 public: otherPublicKey
             },
             this.privateKey,
-            256 
+            256
         );
 
         return this.sharedSecret;
@@ -68,12 +86,12 @@ class DiffieHellman {
 
     uuidToSalt(uuid) {
         const cleanUuid = uuid.replace(/-/g, '');
-        
+
         const salt = new Uint8Array(16);
         for (let i = 0; i < 32; i += 2) {
             salt[i/2] = parseInt(cleanUuid.substr(i, 2), 16);
         }
-        
+
         return salt;
     }
 
@@ -134,14 +152,14 @@ class MinimalCipher {
         const result = new Uint8Array(nonce.length + encrypted.byteLength);
         result.set(nonce, 0);
         result.set(new Uint8Array(encrypted), nonce.length);
-        
+
         return btoa(String.fromCharCode(...result));
     }
 
 
     async decrypt(encryptedBase64) {
         const encrypted = Uint8Array.from(atob(encryptedBase64), c => c.charCodeAt(0));
-        
+
         const nonce = encrypted.slice(0, 8);
         const ciphertext = encrypted.slice(8);
 
@@ -160,6 +178,22 @@ class MinimalCipher {
 
         return this.decoder.decode(decrypted);
     }
+}
+
+async function create_chat() {
+    const keys = new DiffieHellman();
+    await keys.generateKeys();
+
+    const my_open_key = await keys.exportPublicKey();
+    // отправить ключ
+
+    const not_me_open_key = ""; // дождаться чужого ключа
+    await keys.computeSharedSecret(not_me_open_key); // посчитать общий ключ
+
+
+    const uuid = "" // получить UUID поста
+    const ckey = await keys.deriveKey(uuid); // вот и всё ключ создан
+    // map[uuid] = ckey // сохранить как-то так
 }
 
 // ckey to String
@@ -181,10 +215,34 @@ async function strToKey(keyString) {
 }
 
 
+async function exportDiffieHellman(diffieHellman) {
+    return {
+        public: await diffieHellman.exportPublicKey(),
+        private: await diffieHellman.exportPrivateKey()
+    }
+}
+
+async function importDiffieHellman(diffieHellmanObject) {
+    const diffieHellman = new DiffieHellman();
+    diffieHellman.privateKey = await diffieHellman.importPrivateKey(diffieHellmanObject.private);
+    diffieHellman.publicKey = await diffieHellman.importPublicKey(diffieHellmanObject.public);
+    return diffieHellman;
+}
+
+const REGISTRATION_POST_ID = "9b9b2283-e664-4322-b37f-4aa3ee20c2d1";
+const CHAT_STORAGE_WALL = "959127ba-f2f7-4e03-adba-f67ee4ff3a93";
+
+
 const saveMeUUID = (value) => localStorage.setItem('myUUID', value);
 const getMeUUID = () => localStorage.getItem('myUUID');
 const saveCkeys = (data) => localStorage.setItem("ckeys", JSON.stringify(data));
 const getCkeys = () => JSON.parse(localStorage.getItem("ckeys")) || {};
+const saveToken = (token) => localStorage.setItem('access_token', token);
+const getToken = () => localStorage.getItem('access_token');
+const getRegComment = () => localStorage.getItem('regComment');
+const saveRegComment = (value) => localStorage.setItem('regComment', value);
+const saveWaiting = (data) => localStorage.setItem('waiting', JSON.stringify(data));
+const getWaiting = () => JSON.parse(localStorage.getItem('waiting')) || {};
 
 let messages = [];
 
@@ -193,8 +251,8 @@ async function injectSSEProxy() {
 
     window.fetch = async function(...args) {
         const response = await originalFetch.apply(this, args);
-        
-        if (args[0].includes('/notifications/stream')) { 
+
+        if (args[0].includes('/notifications/stream')) {
             const originalBody = response.body;
             const reader = originalBody.getReader();
 
@@ -225,57 +283,51 @@ async function injectSSEProxy() {
                 headers: response.headers
             });
         }
-        
+
         return response;
     };
 }
 
-function send_message(message) {
+
+const randomString = (length = 8) => Math.random().toString(36).substring(2, 2 + length);
+
+function send_message(message, targetId="eda7d543-a8e8-4ee6-b8d9-0f6ae634feb4", actorId="331dea20-bb7c-4c96-ad09-97150f1ad5f6") {
     messages.push({
-        id: "eda7d543-a8e8-4ee6-b8d9-0f6ae634feb4",
+        id: randomString(20),
         type: "comment",
         targetType: "post",
-        targetId: "eda7d543-a8e8-4ee6-b8d9-0f6ae634feb4",
+        targetId: targetId,
         preview: message,
         readAt: null,
         createdAt: "2026-02-14T07:24:20.494Z",
         userId: "a52fcef6-d4de-4453-af62-fbc348d7d997",
         actor: {
-            id:"331dea20-bb7c-4c96-ad09-97150f1ad5f6",
-            "displayName": "ITD+",
-            "username": "ITD+",
-            "avatar": "+"
+            id: actorId,
+            displayName: "ITDCHAT",
+            username: "ITDCHAT",
+            avatar: "Ъ"
         },
         read: false,
         sound: true
     });
 }
-window.send_message = send_message;
-
-
-
-function saveToken(token) {
-    localStorage.setItem('access_token', token);
-}
-
-
-function getToken() {
-    return localStorage.getItem('access_token');
-}
-
 
 
 const originalFetch = window.fetch;
 
+async function refresh() {
+    const resRefresh = await originalFetch('/api/v1/auth/refresh', { method: 'POST' });
+    const data = await resRefresh.json();
+    if (!data.accessToken) return null;
+    saveToken(data.accessToken);
+    return data.accessToken;
+}
+
 async function fetchRefreshOn401(url, options = {}) {
     let accessToken = getToken();
-    
+
     if (!accessToken) {
-        const resRefresh = await originalFetch('/api/v1/auth/refresh', { method: 'POST' });
-        const data = await resRefresh.json();
-        accessToken = data.accessToken;
-        if (!accessToken) return null;
-        saveToken(accessToken);
+        accessToken = await refresh();
     }
 
     let response = await originalFetch(url, {
@@ -288,12 +340,7 @@ async function fetchRefreshOn401(url, options = {}) {
     });
 
     if (response.status === 401) {
-        const resRefresh = await originalFetch('/api/v1/auth/refresh', { method: 'POST' });
-        const data = await resRefresh.json();
-        accessToken = data.accessToken;
-        if (!accessToken) return null;
-        saveToken(accessToken);
-
+        accessToken = await refresh();
 
         response = await originalFetch(url, {
             ...options,
@@ -323,21 +370,17 @@ async function update_chipers() {
 
 function extractPostIdFromUrl(url) {
     const regex = /\/posts\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
-    
     const match = url.match(regex);
-    
     return match ? match[1] : null;
 }
 
 function extractMessageFromEncrypted(input) {
     const regex = /ITD-cross-tunel:mes\s+(.+)/;
     const match = input.match(regex);
-
     return match ? match[1] : null;
 }
 
-window.update_chipers = update_chipers;
-window.chipers = chipers;
+
 async function injectChiper() {
     const originalFetch = window.fetch;
 
@@ -366,7 +409,7 @@ async function injectChiper() {
             } else if (args[1].method == "GET") {
                 root.data.comments = await Promise.all(root.data.comments.map(async (comment) => {
                     const mes = extractMessageFromEncrypted(comment.content);
-                    if (mes) { 
+                    if (mes) {
                         try{
                             comment.content = await chipers[postId].decrypt(mes);
                             return comment;
@@ -378,24 +421,13 @@ async function injectChiper() {
 
             return new Response(JSON.stringify(root), { status: response.status, headers: response.headers });
         }
-        
+
         return await originalFetch.apply(this, args);
     }
 }
 
 
 // ========= Создание чата ===========
-
-function getRegComment() {
-    return localStorage.getItem('regComment');
-}
-
-function saveRegComment(value) {
-    localStorage.setItem('regComment', value);
-}
-
-const REGISTRATION_POST_ID = "9b9b2283-e664-4322-b37f-4aa3ee20c2d1";
-const CHAT_STORAGE_WALL = "959127ba-f2f7-4e03-adba-f67ee4ff3a93";
 
 
 async function registation() {
@@ -413,7 +445,7 @@ async function registation() {
         }
         const data = await response.json();
         saveRegComment(data.id);
-    }   
+    }
 }
 
 async function fetchUserRegistrationComment(user_uuid) {
@@ -425,7 +457,7 @@ async function fetchUserRegistrationComment(user_uuid) {
             {method: "GET"}
         )
         const data = (await response.json()).data;
-        
+
         for (const comment of data.comments) {
             if (comment.author.id == user_uuid) {
                 return comment.id;
@@ -444,14 +476,14 @@ async function fetchUserRegistrationComment(user_uuid) {
 function getOpenKeyFromContent(content) {
     const keyPattern = /open_keyB\n(.+)/;
     const match = content.match(keyPattern);
-    
+
     return match ? match[1] : null;
 }
 
 function getPostIdFromNotification(content) {
     const keyPattern = /"ITDCT:([^"]+)"/;
     const match = content.match(keyPattern);
-    
+
     return match ? match[1] : null;
 }
 
@@ -461,7 +493,7 @@ async function searchKeyB(postId, userUUID) {
         {method: "GET"}
     )
     const data = (await response.json()).data;
-    
+
     for (const comment of data.comments) {
         const key = getOpenKeyFromContent(comment.content)
         if (comment.author.id == userUUID && key) {
@@ -480,14 +512,14 @@ async function initChat(me_uuid, user_uuid) {
         send_message("Пользователь не зарестрирован");
         return;
     }
-    
+
     const response = await fetchRefreshOn401(`/api/posts`, {
         method: "POST",
         headers: {
             'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-            content: `ITD-cross-tunel:chat\n${me_uuid}\n${user_uuid}`, 
+            content: `ITD-cross-tunel:chat\n${me_uuid}\n${user_uuid}`,
             wallRecipientId: CHAT_STORAGE_WALL
         })
     });
@@ -502,7 +534,7 @@ async function initChat(me_uuid, user_uuid) {
     const keys = new DiffieHellman();
     await keys.generateKeys();
     const my_open_key = await keys.exportPublicKey();
-    
+
     const responseComment = await fetchRefreshOn401(`/api/posts/${postId}/comments`, {
             method: "POST",
             headers: {
@@ -528,13 +560,18 @@ async function initChat(me_uuid, user_uuid) {
     }
 
     if (me_uuid == user_uuid) {
-        send_message(`ITDCT:${postId}`);
+        send_message(`ITDCT:${postId}`,);
     }
 
-    send_message("Ожидание ответа пользователя номер 2");
+    const waiting = getWaiting();
+    waiting[postId] = await exportDiffieHellman(keys);
+    waiting[postId].user_uuid = user_uuid;
+    saveWaiting(waiting);
 
-    await new Promise(resolve => setTimeout(resolve, 60000));
+    send_message("Запрос на создания чата создан, ждём ответа второго пользователя");
+}
 
+async function initChatPartTwo(postId, keys, user_uuid) {
     const {comment, keyB} = await searchKeyB(postId, user_uuid);
 
     if (!keyB) {
@@ -542,18 +579,18 @@ async function initChat(me_uuid, user_uuid) {
         return;
     }
 
-    await keys.computeSharedSecret(keyB); 
-    const ckey = await keys.deriveKey(postId); 
-    
+    await keys.computeSharedSecret(keyB);
+    const ckey = await keys.deriveKey(postId);
+
     send_message("Чат создан A");
 
     const ckeys = getCkeys();
     ckeys[postId] = {
         ckey: await keyToStr(ckey),
-        avatar: comment.author.avatar, 
+        avatar: comment.author.avatar,
         name: comment.author.displayName,
         username: comment.author.username
-        
+
     }
     saveCkeys(ckeys);
     await update_chipers();
@@ -561,19 +598,19 @@ async function initChat(me_uuid, user_uuid) {
 
 function extractIdsFromContent(content) {
     const pattern = /^ITD-cross-tunel:chat\n([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\n([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
-    
+
     const match = content.match(pattern);
-    
+
     if (!match) {
-        return null; 
-    }    
+        return null;
+    }
     return {firstId: match[1], secondId: match[2]};
 }
 
 function getOpenKeyAFromContent(content) {
     const keyPattern = /open_keyA\n(.+)/;
     const match = content.match(keyPattern);
-    
+
     return match ? match[1] : null;
 }
 
@@ -583,7 +620,7 @@ async function searchKeyA(postId, userUUID) {
         {method: "GET"}
     )
     const data = (await response.json()).data;
-    
+
     for (const comment of data.comments) {
         const key = getOpenKeyAFromContent(comment.content)
         if (comment.author.id == userUUID && key) {
@@ -602,7 +639,7 @@ async function joyToChat(postId, meUUID) {
     const content = data.content;
     const {firstId, secondId} = extractIdsFromContent(content);
     if (secondId != meUUID) {
-        return; 
+        return;
     }
 
     const {comment, keyA} = await searchKeyA(postId, firstId);
@@ -610,11 +647,11 @@ async function joyToChat(postId, meUUID) {
         send_message("Ключ не найден");
         return;
     }
-    
+
     const keys = new DiffieHellman();
     await keys.generateKeys();
     const my_open_key = await keys.exportPublicKey();
-    
+
     const responseComment = await fetchRefreshOn401(`/api/posts/${postId}/comments`, {
             method: "POST",
             headers: {
@@ -626,19 +663,22 @@ async function joyToChat(postId, meUUID) {
         send_message("Ошибка создания комментария с ключом");
         return;
     }
-
-    await keys.computeSharedSecret(keyA); 
-    const ckey = await keys.deriveKey(postId); 
+    if (comment.author.id == meUUID){
+        send_message("ITD-cross-tunel:open_keyB", postId, meUUID);
+    }
     
-    send_message("Чат создан B");
 
+    await keys.computeSharedSecret(keyA);
+    const ckey = await keys.deriveKey(postId);
+
+    send_message("Чат создан B");
     const ckeys = getCkeys();
     ckeys[postId] = {
         ckey: await keyToStr(ckey),
-        avatar: comment.author.avatar, 
+        avatar: comment.author.avatar,
         name: comment.author.displayName,
         username: comment.author.username
-        
+
     }
     saveCkeys(ckeys);
     await update_chipers();
@@ -646,14 +686,20 @@ async function joyToChat(postId, meUUID) {
 
 function getUserIdFromConnected(message) {
     const regex = /^event:\s*connected\s*\ndata:\s*\{\s*"userId"\s*:\s*"([a-f0-9-]+)"\s*,\s*"timestamp"\s*:\s*\d+\s*\}\s*$/i;
-    
     const match = message.match(regex);
-    
-    if (match) {
-        return match[1]
-    } else {
-        return null;
-    }
+    return match ? match[1] : null;
+}
+
+function getPostIdFromNotificationSSE(message) {
+    const regex = /"targetId":"([^"]+)"/;
+    const match = message.match(regex);
+    return match ? match[1] : null;
+}
+
+function getActorIdFromNotificationSSE(message) {
+    const regex = /"actor":{[^}]*"id":"([^"]+)"/;
+    const match = message.match(regex);
+    return match ? match[1] : null;
 }
 
 async function notificationHandler(message) {
@@ -668,6 +714,20 @@ async function notificationHandler(message) {
         await joyToChat(postId, getMeUUID());
     }
 
+    if (message.includes("notification")) {
+        const postId = getPostIdFromNotificationSSE(message);
+        const waiting = getWaiting();
+        if (postId in waiting) {
+            const data = waiting[postId];
+            const actorId = getActorIdFromNotificationSSE(message);
+            if (data.user_uuid == actorId) {
+                delete waiting[postId];
+                saveWaiting(waiting);
+                await initChatPartTwo(postId, await importDiffieHellman(data), data.user_uuid);
+            }
+        }
+    }
+
     return new TextEncoder().encode(message);
 }
 
@@ -679,14 +739,14 @@ let last_user_id = '';
 function getUsernameFromPath(path) {
     const match = path.match(/\/api\/users\/([^/]+)$/);
     return match ? match[1] : null;
-}   
+}
 
 async function injectNotifications() {
     const originalFetch = window.fetch;
 
     window.fetch = async function(...args) {
         const response = await originalFetch.apply(this, args);
-        
+
         if (args[0].includes("/api/notifications/?offset=0")) {
             const root = await response.json();
             const chats = getCkeys();
@@ -697,9 +757,9 @@ async function injectNotifications() {
                 if (typeof chat == 'string' || Object.keys(chat).length == 0) {continue}
                 const notification = {
                     actor: {
-                        id: "93252a51-a0ea-4401-88ea-fa3fc104270d", 
-                        displayName: chat.displayName, 
-                        username: chat.username, 
+                        id: "93252a51-a0ea-4401-88ea-fa3fc104270d",
+                        displayName: chat.displayName,
+                        username: chat.username,
                         avatar: chat.avatar,
                     },
 
@@ -713,15 +773,15 @@ async function injectNotifications() {
                     type: "reply"
                 }
                 root.notifications.push(notification);
-            } 
-            
+            }
+
             return new Response(JSON.stringify(root), { status: response.status, headers: response.headers });
         }
 
         const username = getUsernameFromPath(args[0]);
         if (username) {
             const data = await response.json();
-            last_user_id = data.id; 
+            last_user_id = data.id;
             return new Response(JSON.stringify(data), { status: response.status, headers: response.headers });
         }
 
@@ -747,7 +807,7 @@ const observer = new MutationObserver(() => {
             const notifications = notificationsList.querySelectorAll(".notification-item");
             notifications.forEach((element) => {
                 if (element.dataset.itd) {return}
-                
+
                 if (element.dataset.notificationId[0] != '@') {
                     element.style.display = 'none';
                     element.dataset.itd = "true";
@@ -763,7 +823,7 @@ const observer = new MutationObserver(() => {
                 if (post && !post.dataset.itd) {
                     const header = post.querySelector(".post-modal__header");
                     if (header) {
-                        //post.innerHTML += "<style>.comment-submit--mic {display: none;}</style>"; 
+                        //post.innerHTML += "<style>.comment-submit--mic {display: none;}</style>";
                         header.style.display = 'none';
                         post.querySelector(".post-modal__text").style.display = 'none';
                         post.querySelector(".post-modal__actions").style.display = 'none';
@@ -774,7 +834,7 @@ const observer = new MutationObserver(() => {
                         textarea.placeholder = 'Написапить сообщение...';
                         textarea.addEventListener('input', () => {
                             if (textarea.value.length == 0) {
-                                
+
                                 setTimeout(() => post.querySelector(".comment-submit--mic").style.display = 'none', 10);
                             }
                         })
@@ -797,14 +857,14 @@ const observer = new MutationObserver(() => {
             }
         }
     }
-    
-    
+
+
 
     const profileActions = document.querySelector(".profile-action__buttons") || document.querySelector(".profile-own-actions");;
 
     if (profileActions && !profileActions.dataset.itd) {
         profileActions.dataset.itd = 'true';
-        profileActions.insertAdjacentHTML('afterbegin', 
+        profileActions.insertAdjacentHTML('afterbegin',
         '<button class="profile-follow-btn chat-btn svelte-p40znu">Создать чат</button>'
         );
         const chatBtn = profileActions.querySelector('.chat-btn');
@@ -812,11 +872,11 @@ const observer = new MutationObserver(() => {
             chatBtn.classList.add("following")
             chatBtn.disabled = true;
             initChat(getMeUUID(), last_user_id);
-        }) 
+        })
     }
 
-    
-}) 
+
+})
 
 window.initChatModule = () => {
     if (!getRegComment()) {
@@ -829,6 +889,4 @@ window.initChatModule = () => {
     observer.observe(document.body, { childList: true, subtree: true });
 }
 
-
 })();
-
