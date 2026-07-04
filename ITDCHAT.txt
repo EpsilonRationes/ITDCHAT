@@ -1,14 +1,13 @@
 // ==UserScript==
-// @name         ITDCHAT
-// @namespace    ITD
-// @version      0.0.1
-// @description  Чат для итд!
+// @name         ITD Chat
+// @namespace    https://github.com/EpsilonRationes/ITDCHAT
+// @version      0.2
+// @description  Расширение для общения в чатах ITD
 // @author       Rationess
-// @match        https://*.xn--d1ah4a.com/*
-// @grant        none
+// @match        https://xn--d1ah4a.com/*
 // @run-at       document-start
+// @grant        none
 // ==/UserScript==
-
 
 (function() {
     'use strict';
